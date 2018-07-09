@@ -9,11 +9,14 @@ endif
 include $(top_srcdir)/common/Makefile.common
 
 # Add cheap-specific CPPFLAGS/CXXFLAGS/LDFLAGS/LIBS as determined by configure
-CPPFLAGS += -I$(top_srcdir)/common -I$(top_srcdir)/fspp -I$(top_srcdir)/cheap/repp @CHEAPCPPFLAGS@
+CPPFLAGS += -I$(top_srcdir)/common -I$(top_srcdir)/fspp -Irepp @CHEAPCPPFLAGS@
 CXXFLAGS += @CHEAPCXXFLAGS@
 LDFLAGS += @CHEAPLDFLAGS@
 LIBS += @CHEAPLIBS@
 DEFS += -DDYNAMIC_SYMBOLS
+
+# Adding trigram lexical pruning capabilities
+CPPFLAGS += -Itrigram
 
 # Further CPPFLAGS/CXXFLAGS/LDFLAGS/LIBS should be determined by configure.ac
 # if they are system-specific or passed as a command-line option to configure
@@ -86,6 +89,9 @@ cheaplibsources = \
 	repp/tdl_options.cpp repp/tdl_options.h \
 	repp/repp_from_pet.cpp repp/repp_from_pet.h \
 	tagger.cpp tagger.h \
+	trigram/trigram.cpp trigram/trigram.h trigram/lattice.h \
+	trigram/lexprune.cpp trigram/lexprune.h \
+	trigram/ut_from_pet.cpp trigram/ut_from_pet.h \
 	$(top_srcdir)/common/bitcode.cpp \
 	$(top_srcdir)/common/chunk-alloc.cpp \
 	$(top_srcdir)/common/configs.cpp \
@@ -207,4 +213,3 @@ EXTRA_DIST = dumpgram.cpp mtest.cpp pet.cpp psqltest.c
 
 profclean:
 	rm -f *.gcov gmon.out *.bb *.bbg *.da
-

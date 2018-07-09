@@ -12,7 +12,7 @@
 #define RUNTIME_ERROR -3
 
 class SessionManager {
-private:
+public:
   class Session {
   public:
     static int next_id;

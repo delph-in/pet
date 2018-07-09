@@ -18,7 +18,7 @@
  *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-/** \file grammar.h 
+/** \file grammar.h
  * grammar rules, grammar
  */
 
@@ -32,6 +32,7 @@
 #include "types.h"
 #include "fs.h"
 #include "lexicon.h"
+#include "trigram.h"
 
 #include <string>
 #include <list>
@@ -56,7 +57,7 @@ enum affix_trait { NONE, PREFIX, INFLECTION, SUFFIX };
 class grammar_rule
 {
  public:
-  /** Constructor for grammar rules. 
+  /** Constructor for grammar rules.
    *  \return If the feature structure of the given type is not a valid rule
    *  (no or empty \c ARGS path), this method returns \c NULL, a grammar rule
    *  for the given type otherwise.
@@ -76,7 +77,7 @@ class grammar_rule
    */
   inline int nextarg() const { return first(_tofill); }
   /** Does the rule extend to the left or to the right?
-   * \todo Remove the current restriction to binary rules. 
+   * \todo Remove the current restriction to binary rules.
    */
   inline bool left_extending() { return first(_tofill) == 1; }
 
@@ -111,7 +112,7 @@ class grammar_rule
 
   /** Return the type of the next argument in PCFG rule */
   inline type_t nextarg_pcfg() { return _pcfg_args[first(_tofill) - 1]; }
-  
+
   /** Return all of the arguments but the current one in the order in which
    *  they should be filled.
    */
@@ -119,7 +120,7 @@ class grammar_rule
 
   /** Return all of the arguments in the order in which they should be
    *  filled.
-   */ 
+   */
   inline list_int *allargs() { return _tofill; }
 
   /** Return the quick check vector for argument \a arg */
@@ -130,15 +131,15 @@ class grammar_rule
   /** Should this rule be treated special when using hyperactive parsing?
    *  Rules whose active items are seldom reused should be made hyperactive
    *  because one dag copying operation is much more expensive than several
-   *  unsuccessful unifications. 
+   *  unsuccessful unifications.
    */
   inline bool hyperactive() { return _hyper; }
 
   /** Return \c true if the items using this rule should always span the whole
-   *  chart 
+   *  chart
    */
   inline bool spanningonly() { return _spanningonly; }
-  
+
   /** Return the type of the nth argument in the pcfg rule */
   inline type_t nth_pcfg_arg(int n) { return _pcfg_args[n - 1]; }
 
@@ -165,7 +166,7 @@ class grammar_rule
 
   fs _f_restriced;  // The feature structure corresponding to this rule
                     // with the packing restrictor applied.
-  
+
   qc_vec *_qc_vector_unif;
   void init_qc_vector_unif();
 
@@ -186,16 +187,16 @@ class rulefilter {
 private:
   int _nrules;
   char * _filtermatrix;
-    
+
   inline char * access(grammar_rule *mother, grammar_rule *daughter) {
     assert(valid() && daughter->id() < _nrules && mother->id() < _nrules);
     return _filtermatrix + daughter->id() + _nrules * mother->id();
   }
-    
+
 public:
   /** create a rulefilter */
   rulefilter() : _nrules(0), _filtermatrix(0) { }
-    
+
   void resize(int n) {
     _nrules = n;
     delete _filtermatrix;
@@ -258,7 +259,7 @@ public:
    *  the returned string will be empty.
    */
   std::string property(std::string key);
-  
+
   /** Return the map containing the grammar properties */
   inline std::map<std::string, std::string> &properties()
     { return _properties; }
@@ -291,7 +292,7 @@ public:
    */
   inline bool filter_compatible(grammar_rule *mother, int arg,
                                 grammar_rule *daughter) {
-    return ! _filter.valid() 
+    return ! _filter.valid()
       || (daughter == NULL) || _filter.get(mother, daughter, arg);
   }
 
@@ -316,11 +317,11 @@ public:
   inline const rulelist &lexrules() { return _lex_rules; }
 
   /** Return list of PCFG rubust parsing rules in this grammar */
-  inline rulelist &pcfg_rules() { return _pcfg_rules; }  
+  inline rulelist &pcfg_rules() { return _pcfg_rules; }
 
   /** Return the number of hyperactive rules in this grammar */
   int nhyperrules();
-  
+
   /** Return the number of stem entries in the grammar */
   inline int nstems() { return _lexicon.size(); }
   /** return a pointer to the lex_stem with type id \a inst_key, or NULL if it
@@ -334,7 +335,7 @@ public:
   extDictionary *extDict() { return _extDict; }
   void clear_dynamic_stems();
 #endif
-  
+
   // _fix_me_ becomes obsolete when yy.cpp does
   //std::list<full_form> lookup_form(const std::string form);
 
@@ -349,7 +350,7 @@ public:
 
   /** Return the statistic maxent model of this grammar */
   inline class tSM *sm() { return _sm; }
-  
+
   inline void sm(tSM* m) { _sm = m; }
 
   /** Return the lexical type predictor ME model */
@@ -359,13 +360,16 @@ public:
   inline class tSM *pcfgsm() { return _pcfgsm; }
 
   /** Return the generative model for agenda manipulation */
-  inline class tGM *gm() { return _gm; } 
+  inline class tGM *gm() { return _gm; }
+
+  /** Return the lexical pruning trigram model */
+  inline class tTrigramModel *lpsm() { return _lpsm; }
 
   /** deactivate all rules */
   void deactivate_all_rules() {
     _rules.clear();
   }
-  
+
   /** activate all (and only) lexical and inflection rules */
   void activate_lex_rules() {
     deactivate_all_rules();
@@ -470,8 +474,11 @@ public:
   // Robust PCFG parsing model.
   class tSM *_pcfgsm;
 
-  // Generative model for agenda manipulation. 
-  class tGM *_gm; 
+  // Generative model for agenda manipulation.
+  class tGM *_gm;
+
+  // Trigram model for lexical pruning
+  class tTrigramModel *_lpsm;
 
   void undump_properties(dumper *f);
   void init_parameters();

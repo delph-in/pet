@@ -33,6 +33,7 @@
 #include "settings.h"
 #include "configs.h"
 #include "logging.h"
+#include "lexprune.h"
 
 #include <iostream>
 
@@ -229,7 +230,7 @@ lex_parser::add(tLexItem *lex) {
  * Helper function for printing debug logs for lex_parser::combine().
  */
 std::string
-debug_combine(lex_stem *stem, tInputItem *i_item, 
+debug_combine(lex_stem *stem, tInputItem *i_item,
               const list_int *prefix_rules, const list_int *infl_rules) {
   ostringstream cdeb;
   cdeb << "combine("
@@ -295,7 +296,7 @@ lex_parser::combine(lex_stem *stem, tInputItem *i_item
     if (newfs.valid()) {
       fs anchor_fs = newfs.get_path_value(tChartUtil::lexicon_tokens_path());
       if (!anchor_fs.valid()) {
-        LOG(logLexproc, ERROR, 
+        LOG(logLexproc, ERROR,
             debug_combine(stem, i_item, prefix_rules, infl_rules) +
             " Reason: lexicon_tokens_path cannot be resolved in fs.");
         return;
@@ -305,7 +306,7 @@ lex_parser::combine(lex_stem *stem, tInputItem *i_item
     if (newfs.valid()) {
       fs anchor_fs = newfs.get_path_value(tChartUtil::lexicon_last_token_path());
       if (!anchor_fs.valid()) {
-        LOG(logLexproc, ERROR, 
+        LOG(logLexproc, ERROR,
             debug_combine(stem, i_item, prefix_rules, infl_rules) +
             " Reason: lexicon_last_token_path cannot be resolved in fs.");
         return;
@@ -318,7 +319,7 @@ lex_parser::combine(lex_stem *stem, tInputItem *i_item
     // LOG(logParse, DEBUG, "combine() succeeded in creating valid fs");
     add(new tLexItem(stem, i_item, newfs, prefix_rules, infl_rules));
   } else {
-    LOG(logLexproc, DEBUG, 
+    LOG(logLexproc, DEBUG,
         debug_combine(stem, i_item, prefix_rules, infl_rules));
   }
 }
@@ -424,7 +425,7 @@ lex_parser::add(tInputItem *inp) {
       //
       list_int *foo = get_prefix_rules(*mrph);
       list_int *bar = get_infl_rules(*mrph);
-      if((foo && !bar) || (!foo && bar)) 
+      if((foo && !bar) || (!foo && bar))
         Chart->add(new tInputItem(inp, mrph->base(), foo, bar));
       free_list(foo);
       free_list(bar);
@@ -514,7 +515,7 @@ lex_parser::dependency_filter(setting *deps, bool unidirectional
     // processing or not
     if (lex->passive()
         && lex->trait() != INPUT_TRAIT
-        && (!lex_exhaustive 
+        && (!lex_exhaustive
             || (lex->inflrs_complete_p() && lex->prefix_lrs_complete_p()))) {
       f = lex->get_fs();
 
@@ -872,8 +873,8 @@ bool lex_parser::next_input(std::istream &in, std::string &result) {
 }
 
 int
-lex_parser::process_input(string input, inp_list &inp_tokens, 
-                          bool chart_mapping) 
+lex_parser::process_input(string input, inp_list &inp_tokens,
+                          bool chart_mapping)
 {
   // TODO get rid of this logging control; use proper logging instead
   // --- i must admit, i find the bit-coded control rather more convenient,
@@ -913,10 +914,10 @@ lex_parser::process_input(string input, inp_list &inp_tokens,
       sp = new tItemFSCPrinter(buffer);
     else
       sp = new tItemYYPrinter(buffer);
-    
+
     assert(sp != NULL);
-    for(inp_iterator item = inp_tokens.begin(); 
-        item != inp_tokens.end(); 
+    for(inp_iterator item = inp_tokens.begin();
+        item != inp_tokens.end();
         ++item) {
       if(item != inp_tokens.begin() && format != "fsc") buffer << " ";
       sp->print(*item);
@@ -964,11 +965,11 @@ lex_parser::process_input(string input, inp_list &inp_tokens,
       sp = new tItemFSCPrinter(buffer);
     else
       sp = new tItemYYPrinter(buffer);
-    
+
     assert(sp != NULL);
     bool initial = true;
-    for(inp_iterator item = inp_tokens.begin(); 
-        item != inp_tokens.end(); 
+    for(inp_iterator item = inp_tokens.begin();
+        item != inp_tokens.end();
         ++item) {
       if(!passive_unblocked(*item)) continue;
       if(!initial && format != "fsc") buffer << " ";
@@ -1088,6 +1089,19 @@ lex_parser::lexical_processing(inp_list &inp_tokens
   //tTclChartPrinter chp("/tmp/lex-chart", 0);
   //Chart->print(&chp);
 
+  item_predicate valid = (lex_exhaustive ? unblocked_lex_complete : non_input);
+  //don't run sequence tagger on unconnected Chart
+  if (Grammar->lpsm() && lex_exhaustive && Chart->connected(valid)) {
+    if (cheap_settings->lookup("ut-viterbi") != NULL &&
+        string("true").compare(cheap_settings->value("ut-viterbi")) == 0) {
+      viterbi(Grammar->lpsm());
+    } else {
+      double threshold;
+      get_opt("opt_lpthreshold", threshold);
+      lexprune(Grammar->lpsm(), threshold);
+    }
+  }
+
   // If -default-les or -predict-les is used, lexical entries for unknown
   // input items are only added where there are gaps in the chart.
   // If -default-les=all is used, generics have already been added for those
@@ -1099,7 +1113,6 @@ lex_parser::lexical_processing(inp_list &inp_tokens
 
   // Gap computation.
   list< tInputItem * > unexpanded;
-  item_predicate valid = (lex_exhaustive ? lex_complete : non_input);
   if (! Chart->connected(valid)) {
     unexpanded = find_unexpanded(Chart, valid) ;
   }

@@ -46,6 +46,8 @@
 #include "dagprinter.h"
 #include <fstream>
 
+#include "ut_from_pet.h"
+
 using namespace std;
 
 static int init();
@@ -65,6 +67,13 @@ static int init() {
   managed_opt("opt_chart_pruning_strategy",
               "determines the chart pruning strategy: 0=all tasks; 1=all successful tasks; 2=all passive items (default)",
               2);
+  managed_opt("opt_ut",
+              "Request ubertagging, with settings in file argument",
+              std::string(""));
+  managed_opt("opt_lpthreshold",
+    "probability threshold for discarding lexical items",
+    -1.0);
+
   return true;
 }
 
@@ -436,7 +445,7 @@ undump_dags(dumper *f) {
 tGrammar::tGrammar(const char * filename)
     : _properties(), _root_insts(0), _generics(0),
       _deleted_daughters(0), _packing_restrictor(0),
-      _sm(0), _lexsm(0), _pcfgsm(0), _gm(0)
+      _sm(0), _lexsm(0), _pcfgsm(0), _gm(0), _lpsm(0)
 {
 #ifdef HAVE_ICU
     initialize_encoding_converter(cheap_settings->req_value("encoding"));
@@ -602,7 +611,7 @@ tGrammar::tGrammar(const char * filename)
     if(get_opt_string("opt_preprocess_only").empty()) {
       //
       // a parse selection model can be supplied on the command line or through
-      // the settings file.  and furthermore, even when a setting is present, 
+      // the settings file.  and furthermore, even when a setting is present,
       // the command line can take precedence, including disabling parse
       // ranking by virtue of a special `null' model.
       //
@@ -625,8 +634,8 @@ tGrammar::tGrammar(const char * filename)
       if (pcfg_file != 0) {
         try {
           _pcfgsm = new tPCFG(this, pcfg_file, filename);
-          // delete pcfgsm; 
-          // only pcfg rules are loaded, not their weights 
+          // delete pcfgsm;
+          // only pcfg rules are loaded, not their weights
           // TODO: what was happening here?
         } catch (tError &e) {
           LOG(logGrammar, ERROR, e.getMessage());
@@ -652,6 +661,33 @@ tGrammar::tGrammar(const char * filename)
           LOG(logGrammar, ERROR, e.getMessage());
           _lexsm = 0;
         }
+      }
+
+    } // if
+    const std::string opt_ut = get_opt_string("opt_ut");
+    if (!opt_ut.empty()) { //ut requested
+      if (opt_ut != "null") {
+        settings *ut_settings = new settings(opt_ut, cheap_settings->base(),
+          "reading");
+        if (!ut_settings->valid())
+          throw tError("Unable to read UT configuration '" + opt_ut + "'.");
+        cheap_settings->install(ut_settings);
+      }
+      try {
+        double threshold;
+        get_opt("opt_lpthreshold", threshold);
+        if (threshold < 0) { //and hence wasn't set on commandline
+          if (cheap_settings->lookup("ut-threshold") != NULL){
+            set_opt("opt_lpthreshold",
+              strtod(cheap_settings->value("ut-threshold"), NULL));
+          } else
+            set_opt("opt_lpthreshold", 0);
+        }
+        _lpsm = createTrigramModel(cheap_settings);
+      }
+      catch(tError &e) {
+        LOG(logGrammar, ERROR, e.getMessage());
+        _lpsm = 0;
       }
     } // if
 
@@ -905,6 +941,7 @@ tGrammar::~tGrammar()
     delete _sm;
     delete _pcfgsm;
     delete _lexsm;
+    delete _lpsm;
 
 #ifdef CONSTRAINT_CACHE
     free_constraint_cache(nstatictypes);
